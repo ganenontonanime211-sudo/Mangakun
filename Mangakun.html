@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mangakun - Super Lengkap</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #121212;
+      color: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      text-align: center;
+      padding: 20px;
+      background: #1e1e1e;
+      border-bottom: 2px solid #00aaff;
+    }
+    h1 { margin: 0; color: #00aaff; }
+    .search-box { text-align: center; margin: 20px; }
+    input {
+      padding: 10px;
+      width: 60%;
+      border: 2px solid #00aaff;
+      border-radius: 8px;
+      background: #1e1e1e;
+      color: white;
+      outline: none;
+    }
+    #results, #favorites, #chapters, #reader, #random {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+      gap: 20px;
+      padding: 20px;
+    }
+    .manga-card, .chapter-btn {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 10px;
+      text-align: center;
+      transition: transform 0.2s;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    .manga-card:hover, .chapter-btn:hover { transform: translateY(-5px); }
+    .manga-card img { width: 120px; border-radius: 8px; }
+    button {
+      margin-top: 8px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      background: #00aaff;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover { background: #0088cc; }
+    .section-title {
+      padding: 10px 20px;
+      font-size: 1.2em;
+      border-left: 4px solid #00aaff;
+      margin-top: 20px;
+    }
+    #reader img {
+      max-width: 90%;
+      margin: 10px auto;
+      display: block;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📚 Mangakun</h1>
+    <p>Cari, baca, simpan favorit, dan temukan manga dengan mudah</p>
+  </header>
+
+  <div class="search-box">
+    <input type="text" id="search" placeholder="🔍 Cari manga (contoh: One Piece, Naruto)">
+  </div>
+
+  <h2 class="section-title">🔥 Hasil Pencarian</h2>
+  <div id="results"></div>
+
+  <h2 class="section-title">❤️ Favorit Saya</h2>
+  <div id="favorites"></div>
+
+  <h2 class="section-title">🎲 Manga Random</h2>
+  <div id="random"></div>
+
+  <h2 class="section-title">📖 Daftar Chapter</h2>
+  <div id="chapters"></div>
+
+  <h2 class="section-title">📘 Reader</h2>
+  <div id="reader"></div>
+
+  <script>
+    const searchInput = document.getElementById("search");
+    const resultsDiv = document.getElementById("results");
+    const favoritesDiv = document.getElementById("favorites");
+    const randomDiv = document.getElementById("random");
+    const chaptersDiv = document.getElementById("chapters");
+    const readerDiv = document.getElementById("reader");
+
+    let favorites = JSON.parse(localStorage.getItem("favorites")) || [];
+
+    async function searchManga(query) {
+      resultsDiv.innerHTML = "<p>Sedang mencari...</p>";
+      let res = await fetch(`https://api.mangadex.org/manga?title=${query}&limit=12&includes[]=cover_art`);
+      let data = await res.json();
+      resultsDiv.innerHTML = "";
+      data.data.forEach(manga => renderManga(manga, resultsDiv));
+    }
+
+    async function fetchRandomManga() {
+      randomDiv.innerHTML = "<p>Memuat random manga...</p>";
+      let res = await fetch(`https://api.mangadex.org/manga?limit=1&includes[]=cover_art&order[random]=desc`);
+      let data = await res.json();
+      randomDiv.innerHTML = "";
+      data.data.forEach(manga => renderManga(manga, randomDiv));
+    }
+
+    function renderManga(manga, container) {
+      let coverFile = manga.relationships.find(r => r.type === "cover_art")?.attributes?.fileName;
+      let coverUrl = coverFile ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFile}.256.jpg` : "";
+      let card = document.createElement("div");
+      card.className = "manga-card";
+      card.innerHTML = `
+        <img src="${coverUrl}" alt="${manga.attributes.title.en || 'Manga'}">
+        <h3>${manga.attributes.title.en || "No Title"}</h3>
+        <button>+ Favorit</button>
+      `;
+      card.querySelector("button").onclick = (e) => {
+        e.stopPropagation();
+        addToFavorites(manga);
+      };
+      card.onclick = () => loadChapters(manga.id);
+      container.appendChild(card);
+    }
+
+    function addToFavorites(manga) {
+      if (!favorites.find(f => f.id === manga.id)) {
+        favorites.push(manga);
+        localStorage.setItem("favorites", JSON.stringify(favorites));
+        renderFavorites();
+      }
+    }
+
+    function renderFavorites() {
+      favoritesDiv.innerHTML = "";
+      favorites.forEach(manga => renderManga(manga, favoritesDiv));
+    }
+
+    async function loadChapters(mangaId) {
+      chaptersDiv.innerHTML = "<p>Memuat daftar chapter...</p>";
+      readerDiv.innerHTML = "";
+      let res = await fetch(`https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage[]=en&order[chapter]=asc&limit=30`);
+      let data = await res.json();
+      chaptersDiv.innerHTML = "";
+      data.data.forEach(chap => {
+        let btn = document.createElement("div");
+        btn.className = "chapter-btn";
+        btn.innerText = "Chapter " + (chap.attributes.chapter || "?");
+        btn.onclick = () => loadChapterPages(chap.id);
+        chaptersDiv.appendChild(btn);
+      });
+    }
+
+    async function loadChapterPages(chapterId) {
+      readerDiv.innerHTML = "<p>Memuat halaman...</p>";
+      let res = await fetch(`https://api.mangadex.org/at-home/server/${chapterId}`);
+      let data = await res.json();
+      readerDiv.innerHTML = "";
+      data.chapter.data.forEach(page => {
+        let img = document.createElement("img");
+        img.src = `${data.baseUrl}/data/${data.chapter.hash}/${page}`;
+        readerDiv.appendChild(img);
+      });
+    }
+
+    searchInput.addEventListener("keyup", () => {
+      if (searchInput.value.length > 2) {
+        searchManga(searchInput.value);
+      }
+    });
+
+    // Load awal
+    renderFavorites();
+    fetchRandomManga();
+  </script>
+</body>
+</html>
